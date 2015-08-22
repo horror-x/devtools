@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment]
+"LIB"="c:\\Program Files\\Microsoft Visual Studio 10.0\\VC\\lib;C:\\Program Files\\Microsoft SDKs\\Windows\\v7.0A\\Lib"
+"PATH"="%PATH%;c:\\Program Files\\Microsoft Visual Studio 10.0\\VC\\bin;c:\\Program Files\\Microsoft Visual Studio 10.0\\Common7\\IDE;c:\\Program Files\\Microsoft Visual Studio 10.0\\Common7\\Tools;C:\\Program Files\\Microsoft SDKs\\Windows\\v7.0A\\Bin;C:\\windows\\Microsoft.NET\\Framework\\v4.0.30319"
+"LIBPATH"="c:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319;c:\\Program Files\\Microsoft Visual Studio 10.0\\VC\\lib"
+"INCLUDE"="c:\\Program Files\\Microsoft Visual Studio 10.0\\VC\\include;C:\\Program Files\\Microsoft SDKs\\Windows\\v7.0A\\Include"
+"DevEnvDir"="c:\\Program Files\\Microsoft Visual Studio 10.0\\Common7\\IDE"
+"VSINSTALLDIR"="c:\\Program Files\\Microsoft Visual Studio 10.0"
+"VCINSTALLDIR"="c:\\Program Files\\Microsoft Visual Studio 10.0\\VC"
+"DevEnvDir"="c:\\Program Files\\Microsoft Visual Studio 10.0\\Common7\\IDE"
+"WindowsSdkDir"="C:\\Program Files\\Microsoft SDKs\\Windows\\76.0A\\"

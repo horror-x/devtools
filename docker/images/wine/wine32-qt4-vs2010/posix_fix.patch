@@ -1,0 +1,55 @@
+From 8c4a17aace015964674d93046776abcb75ef2342 Mon Sep 17 00:00:00 2001
+From: Debao Zhang <dbzhang800@gmail.com>
+Date: Wed, 4 Apr 2012 17:23:46 -0700
+Subject: [PATCH] Remove macro _POSIX_ from Win32 special file
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Macro _POSIX_ doesn't used by this two files. And it will casued compile
+errors under VS2005/VS2008/VS2010 such as:
+
+Error 19 error C3861: _fileno: identifier not found c:\Dev\Builds\Qt\qt-everywhere-opensource-src-4.8.1\src\corelib\io\qfsfileengine_win.cpp 443
+Error 20 error C3861: _fileno: identifier not found c:\Dev\Builds\Qt\qt-everywhere-opensource-src-4.8.1\src\corelib\io\qfsfileengine_win.cpp 468
+Error 21 error C3861: _fileno: identifier not found c:\Dev\Builds\Qt\qt-everywhere-opensource-src-4.8.1\src\corelib\io\qfsfileengine_win.cpp 607
+
+when we don't use precompiled headers. And this error will triggered when
+we reomve QT_NO_STL from QtCore.
+
+Because stdio.h declares fileno instead of _fileno when _POSIX_ is
+defined.
+
+Change-Id: I9d9031578dac7b7c5f7b77098839723a4bc8bfdf
+Reviewed-by: Thiago Macieira <thiago.macieira@intel.com>
+---
+ src/corelib/io/qfilesystemengine_win.cpp |    1 -
+ src/corelib/io/qfsfileengine_win.cpp     |    1 -
+ 2 files changed, 0 insertions(+), 2 deletions(-)
+
+diff --git a/src/corelib/io/qfilesystemengine_win.cpp b/src/corelib/io/qfilesystemengine_win.cpp
+index 294affc..3e7e34d 100644
+--- a/src/corelib/io/qfilesystemengine_win.cpp
++++ b/src/corelib/io/qfilesystemengine_win.cpp
+@@ -41,7 +41,6 @@
+ 
+ #include "qfilesystemengine_p.h"
+ 
+-#define _POSIX_
+ #include "qplatformdefs.h"
+ #include "private/qabstractfileengine_p.h"
+ #include "private/qfsfileengine_p.h"
+diff --git a/src/corelib/io/qfsfileengine_win.cpp b/src/corelib/io/qfsfileengine_win.cpp
+index f6362b1..e80365f 100644
+--- a/src/corelib/io/qfsfileengine_win.cpp
++++ b/src/corelib/io/qfsfileengine_win.cpp
+@@ -39,7 +39,6 @@
+ **
+ ****************************************************************************/
+ 
+-#define _POSIX_
+ #include "qplatformdefs.h"
+ #include "private/qabstractfileengine_p.h"
+ #include "private/qfsfileengine_p.h"
+-- 
+1.7.1
+

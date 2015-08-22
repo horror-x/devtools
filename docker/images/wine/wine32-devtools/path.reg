@@ -1,0 +1,4 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment]
+"PATH"="%PATH%;C:\\Perl\\bin;C:\\Python27\\Scripts;C:\\Program Files\\7-Zip;C:\\Program Files\\Git\\bin;C:\\Program Files\\CMake\\bin"
