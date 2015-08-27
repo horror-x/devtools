@@ -1,5 +1,6 @@
 FROM wine32-vs2010
 
+ENV QT_LINK_MODE %QT_LINK_MODE%
 ADD install.sh /tmp/install.sh
 ADD posix_fix.patch /tmp/posix_fix.patch
 RUN chmod +x /tmp/install.sh

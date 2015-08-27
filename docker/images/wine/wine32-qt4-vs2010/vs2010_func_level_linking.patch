@@ -1,0 +1,13 @@
+diff --git a/mkspecs/win32-msvc2010/qmake.conf b/mkspecs/win32-msvc2010/qmake.conf
+index 9e5711c..cf34083 100644
+--- a/mkspecs/win32-msvc2010/qmake.conf
++++ b/mkspecs/win32-msvc2010/qmake.conf
+@@ -16,7 +16,7 @@ QMAKE_LEX               = flex
+ QMAKE_LEXFLAGS          =
+ QMAKE_YACC              = byacc
+ QMAKE_YACCFLAGS         = -d
+-QMAKE_CFLAGS            = -nologo -Zm200 -Zc:wchar_t-
++QMAKE_CFLAGS            = -nologo -Zm200 -Zc:wchar_t- -Gy
+ QMAKE_CFLAGS_WARN_ON    = -W3
+ QMAKE_CFLAGS_WARN_OFF   = -W0
+ QMAKE_CFLAGS_RELEASE    = -O2 -MD

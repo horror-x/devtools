@@ -1,0 +1,38 @@
+#!/bin/bash -e
+
+QT_LINK_MODE=shared
+
+while [[ $# > 0 ]]; do
+	arg="$1"
+	case $arg in
+		--shared)
+			QT_LINK_MODE=shared
+			;;
+		--static)
+			QT_LINK_MODE=static
+			;;
+		*)		
+			echo "Unknown option: $arg"
+			echo "Usage: ./configure [--shared|--static]"
+			exit 1
+			;;
+	esac
+	shift
+done
+
+VARS=QT_LINK_MODE
+
+SED_COMMANDS=""
+for var in $VARS; do
+	if [ -n "$SED_COMMANDS" ]; then
+		SED_COMMANDS="$SED_COMMANDS; "
+	fi
+	SED_COMMANDS="${SED_COMMANDS}s/%$var%/${!var}/g"
+done
+
+sed "$SED_COMMANDS" < Dockerfile.in > Dockerfile
+
+echo "Configured:"
+for var in $VARS; do
+	printf "    %-16s ${!var}" "$var"
+done

@@ -1,5 +1,9 @@
 #!/bin/bash -ex
 
+if [ -z "$QT_LINK_MODE" ]; then
+	echo "QT_LINK_MODE not defined!" 1>&2
+fi
+
 WIN_PATH_SRC=`wine cmd /c "echo %PATH%" | tr -d '\r\n' | sed 's/\\\\/\\\\\\\\\\\\\\\\/g'`
 REG_HEADER="Windows Registry Editor Version 5.00\r\n\r\n[HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Control\\\\Session Manager\\\\Environment]\r\n"
 
@@ -14,9 +18,12 @@ rm -r /tmp/openssl
 git clone --depth=1 git://gitorious.org/qt/qt.git /opt/qt
 rm -r /opt/qt/.git
 patch -p1 -d /opt/qt < /tmp/posix_fix.patch
+if [ "$QT_LINK_MODE" == "static" ]; then
+	patch -p1 -d /opt/qt < /tmp/vs2010_func_level_linking.patch
+done
 
 # Configure and build Qt
-wine cmd /c "cd /D Z:\\opt\\qt && configure.exe -arch windows -platform win32-msvc2010 -opensource -release -no-exceptions -no-qt3support -nomake examples -nomake demos -nomake tools -nomake translations -nomake docs -no-accessibility -no-libtiff -no-phonon -no-phonon-backend -no-multimedia -no-webkit -no-scripttools -no-declarative -confirm-license -I Z:\\opt\\openssl\\include -L Z:\\opt\\openssl\\lib -l libeay32 -l ssleay32"
+wine cmd /c "cd /D Z:\\opt\\qt && configure.exe -arch windows -platform win32-msvc2010 -opensource -release -$QT_LINK_MODE -no-exceptions -no-qt3support -nomake examples -nomake demos -nomake tools -nomake translations -nomake docs -no-accessibility -no-libtiff -no-phonon -no-phonon-backend -no-multimedia -no-webkit -no-scripttools -no-declarative -confirm-license -I Z:\\opt\\openssl\\include -L Z:\\opt\\openssl\\lib -l libeay32 -l ssleay32"
 wine cmd /c "cd /D Z:\\opt\\qt && nmake"
 
 # Add qt bin directory to PATH
