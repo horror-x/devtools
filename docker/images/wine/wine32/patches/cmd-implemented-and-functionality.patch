@@ -1,0 +1,197 @@
+From 871ed294438da91f1dceed6a96cabeefd1e8f26e Mon Sep 17 00:00:00 2001
+From: Mikhail Bystryantsev <ho-rr-or@mail.ru>
+Date: Sat, 24 Jan 2015 17:57:00 +0300
+Subject: cmd: implemented && and || functionality
+
+---
+ programs/cmd/builtins.c                  | 14 +++++++++++---
+ programs/cmd/tests/test_builtins.cmd     | 13 +++++++++++++
+ programs/cmd/tests/test_builtins.cmd.exp | 11 +++++++++++
+ programs/cmd/tests/test_cmdline.cmd      | 20 ++++++++++++++++++++
+ programs/cmd/tests/test_cmdline.cmd.exp  | 22 ++++++++++++++++++++++
+ programs/cmd/wcmdmain.c                  | 10 +++++++++-
+ 6 files changed, 86 insertions(+), 4 deletions(-)
+
+diff --git a/programs/cmd/builtins.c b/programs/cmd/builtins.c
+index dd006ff..088dbf7 100644
+--- a/programs/cmd/builtins.c
++++ b/programs/cmd/builtins.c
+@@ -1503,6 +1503,7 @@ static void WCMD_part_execute(CMD_LIST **cmdList, const WCHAR *firstcmd,
+ {
+   CMD_LIST *curPosition = *cmdList;
+   int myDepth = (*cmdList)->bracketDepth;
++  BOOL skipAppended = FALSE;
+ 
+   WINE_TRACE("cmdList(%p), firstCmd(%s), doIt(%d)\n", cmdList, wine_dbgstr_w(firstcmd),
+              executecmds);
+@@ -1537,10 +1538,17 @@ static void WCMD_part_execute(CMD_LIST **cmdList, const WCHAR *firstcmd,
+                  (*cmdList)->bracketDepth, myDepth);
+ 
+       /* Execute any statements appended to the line */
+-      /* FIXME: Only if previous call worked for && or failed for || */
+       if ((*cmdList)->prevDelim == CMD_ONFAILURE ||
+           (*cmdList)->prevDelim == CMD_ONSUCCESS) {
+-        if (processThese && (*cmdList)->command) {
++
++        if (!skipAppended &&
++            (((*cmdList)->prevDelim == CMD_ONFAILURE && errorlevel == 0) ||
++            ((*cmdList)->prevDelim == CMD_ONSUCCESS && errorlevel != 0))) {
++          WINE_TRACE("Prev delim %d and errorlevel %d, skipping appended statements\n", (*cmdList)->prevDelim, errorlevel);
++          skipAppended = TRUE;
++        }
++
++        if (!skipAppended && processThese && (*cmdList)->command) {
+           WCMD_execute ((*cmdList)->command, (*cmdList)->redirects,
+                         cmdList, FALSE);
+         }
+@@ -1564,7 +1572,7 @@ static void WCMD_part_execute(CMD_LIST **cmdList, const WCHAR *firstcmd,
+           processThese = !executecmds;
+ 
+           /* Process the ELSE part */
+-          if (processThese) {
++          if (!skipAppended && processThese) {
+             const int keyw_len = sizeof(ifElse)/sizeof(ifElse[0]) + 1;
+             WCHAR *cmd = ((*cmdList)->command) + keyw_len;
+ 
+diff --git a/programs/cmd/tests/test_builtins.cmd b/programs/cmd/tests/test_builtins.cmd
+index 16fdd43..4ee9708 100644
+--- a/programs/cmd/tests/test_builtins.cmd
++++ b/programs/cmd/tests/test_builtins.cmd
+@@ -194,6 +194,19 @@ type C
+ (if 1==0 (echo A > B) else echo C)
+ cd .. & rd /s/q foobar
+ 
++echo --------- Testing ONSUCCESS and ONFAILURE delimeters --------------
++if 1 == 1 (echo 1) || echo 2
++echo --
++if 1 == 1 (echo 1) && echo 2
++echo --
++if 1 == 1 (cmd /c exit 0) && echo 1
++echo --
++if 1 == 1 (cmd /c exit 1) && echo 1
++echo --
++if 1 == 1 (cmd /c exit 0) || echo 1
++echo --
++if 1 == 1 (cmd /c exit 1) || echo 1
++
+ echo ------------ Testing circumflex escape character ------------
+ rem Using something like "echo foo^" asks for an additional char after a "More?" prompt on the following line; it's not possible to currently test that non-interactively
+ echo ^hell^o, world
+diff --git a/programs/cmd/tests/test_builtins.cmd.exp b/programs/cmd/tests/test_builtins.cmd.exp
+index 828a651..5cf7adc 100644
+--- a/programs/cmd/tests/test_builtins.cmd.exp
++++ b/programs/cmd/tests/test_builtins.cmd.exp
+@@ -199,6 +199,17 @@ foo
+ A
+ B
+ C
++--------- Testing ONSUCCESS and ONFAILURE delimeters --------------
++1
++--
++1
++2
++--
++1
++--
++--
++--
++1
+ ------------ Testing circumflex escape character ------------
+ hello, world
+ hello, world
+diff --git a/programs/cmd/tests/test_cmdline.cmd b/programs/cmd/tests/test_cmdline.cmd
+index 32a1ef2..6968f53 100644
+--- a/programs/cmd/tests/test_cmdline.cmd
++++ b/programs/cmd/tests/test_cmdline.cmd
+@@ -266,6 +266,26 @@ call   tell 1 2
+ call tell(1234)
+ call tell(12(34)
+ call tell(12;34)
++echo --------- Testing ONSUCCESS and ONFAILURE delimeters  --------------
++echo 1&&echo 2
++echo --
++echo 1||echo 2
++echo --
++echo 1||echo 2&&echo 3
++echo --
++echo 1&&echo 2||echo 3
++echo --
++echo 1&&echo 2&&echo 3
++echo --
++echo 1||echo 2||echo 3
++echo --
++cmd /c exit 0 && echo 1
++echo --
++cmd /c exit 1 && echo 1
++echo --
++cmd /c exit 0 || echo 1
++echo --
++cmd /c exit 1 || echo 1
+ echo --------- Finished  --------------
+ del tell.bat say*.* bazbaz*.bat
+ exit
+diff --git a/programs/cmd/tests/test_cmdline.cmd.exp b/programs/cmd/tests/test_cmdline.cmd.exp
+index 980f674..a300a49 100644
+--- a/programs/cmd/tests/test_cmdline.cmd.exp
++++ b/programs/cmd/tests/test_cmdline.cmd.exp
+@@ -130,4 +130,26 @@ THIS FAILS: cmd ignoreme/c say one
+ 0:tell,1:(1234),2:,All:'(1234)'
+ 0:tell,1:(12(34),2:,All:'(12(34)'
+ 0:tell,1:(12,2:34),All:'(12;34)'
++--------- Testing ONSUCCESS and ONFAILURE delimeters  --------------
++1
++2
++--
++1
++--
++1
++--
++1
++2
++--
++1
++2
++3
++--
++1
++--
++1
++--
++--
++--
++1
+ --------- Finished  --------------
+diff --git a/programs/cmd/wcmdmain.c b/programs/cmd/wcmdmain.c
+index e5865e6..b593776 100644
+--- a/programs/cmd/wcmdmain.c
++++ b/programs/cmd/wcmdmain.c
+@@ -2269,6 +2269,7 @@ CMD_LIST *WCMD_process_commands(CMD_LIST *thisCmd, BOOL oneBracket,
+                                 BOOL retrycall) {
+ 
+     int bdepth = -1;
++    BOOL skipAppended = FALSE;
+ 
+     if (thisCmd && oneBracket) bdepth = thisCmd->bracketDepth;
+ 
+@@ -2286,10 +2287,17 @@ CMD_LIST *WCMD_process_commands(CMD_LIST *thisCmd, BOOL oneBracket,
+         return thisCmd->nextcommand;
+       }
+ 
++      if (!skipAppended &&
++          ((thisCmd->prevDelim == CMD_ONFAILURE && errorlevel == 0) ||
++          (thisCmd->prevDelim == CMD_ONSUCCESS && errorlevel != 0))) {
++        WINE_TRACE("Prev delim %d and errorlevel %d, skip following commands\n", thisCmd->prevDelim, errorlevel);
++        skipAppended = TRUE;
++      }
++
+       /* Ignore the NULL entries a ')' inserts (Only 'if' cares
+          about them and it will be handled in there)
+          Also, skip over any batch labels (eg. :fred)          */
+-      if (thisCmd->command && thisCmd->command[0] != ':') {
++      if (!skipAppended && thisCmd->command && thisCmd->command[0] != ':') {
+         WINE_TRACE("Executing command: '%s'\n", wine_dbgstr_w(thisCmd->command));
+         WCMD_execute (thisCmd->command, thisCmd->redirects, &thisCmd, retrycall);
+       }
+-- 
+1.8.5.2.msysgit.0
+

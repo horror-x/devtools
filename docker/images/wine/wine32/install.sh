@@ -10,6 +10,10 @@ apt-get install -y --no-install-recommends $BASE_TOOLS $DEV_TOOLS libx11-6:i386 
 
 git clone git://source.winehq.org/git/wine /tmp/wine
 cd /tmp/wine
+for patch in `ls /tmp/patches`; do
+	patch -p1 -d /tmp/wine < /tmp/patches/$patch
+done
+
 ./configure --without-gettext --without-jpeg --without-alsa --without-coreaudio --without-oss --without-xrender --without-opengl
 make install
 

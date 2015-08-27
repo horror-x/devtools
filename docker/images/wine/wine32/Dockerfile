@@ -2,6 +2,7 @@ FROM debian:wheezy
 
 ADD install.sh /tmp/install.sh
 ADD vars.reg /tmp/vars.reg
+ADD patches /tmp/patches
 RUN chmod +x /tmp/install.sh
 RUN /tmp/install.sh
 ENV WINEPREFIX /opt/win32

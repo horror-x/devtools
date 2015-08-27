@@ -1,0 +1,348 @@
+From cae66856dc83573a429f1725b2dc676d9044fec2 Mon Sep 17 00:00:00 2001
+From: Mikhail Bystryantsev <ho-rr-or@mail.ru>
+Date: Sat, 29 Aug 2015 16:17:59 +0300
+Subject: findstr: minimal implementation
+
+---
+ programs/findstr/Makefile.in |   3 +
+ programs/findstr/findstr.rc  |  31 ++++++
+ programs/findstr/main.c      | 226 +++++++++++++++++++++++++++++++++++++++++--
+ programs/findstr/resource.h  |  26 +++++
+ 4 files changed, 280 insertions(+), 6 deletions(-)
+ create mode 100644 programs/findstr/findstr.rc
+ create mode 100644 programs/findstr/resource.h
+
+diff --git a/programs/findstr/Makefile.in b/programs/findstr/Makefile.in
+index 10875af..e1963b8 100644
+--- a/programs/findstr/Makefile.in
++++ b/programs/findstr/Makefile.in
+@@ -1,5 +1,8 @@
+ MODULE    = findstr.exe
+ APPMODE   = -mconsole -municode
++IMPORTS   = user32
+ 
+ C_SRCS = \
+ 	main.c
++
++RC_SRCS = findstr.rc
+diff --git a/programs/findstr/findstr.rc b/programs/findstr/findstr.rc
+new file mode 100644
+index 0000000..97bcd8f
+--- /dev/null
++++ b/programs/findstr/findstr.rc
+@@ -0,0 +1,31 @@
++/*
++ * Findstr resources
++ *
++ * Copyright 2015 Mikhail Bystryantsev
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#include "resource.h"
++
++LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
++
++STRINGTABLE {
++	STRING_BAD_COMMAND_LINE,  "FINDSTR: Bad command line\n"
++	STRING_ARG_IGNORED,       "FINDSTR: %1 ignored\n"
++	STRING_CANNOT_OPEN,       "FINDSTR: Cannot open %1\n"
++	STRING_NO_SEARCH_STRINGS, "FINDSTR: No search strings\n"
++}
++
+diff --git a/programs/findstr/main.c b/programs/findstr/main.c
+index de5de33..669ac99 100644
+--- a/programs/findstr/main.c
++++ b/programs/findstr/main.c
+@@ -1,5 +1,6 @@
+ /*
+  * Copyright 2012 Qian Hong
++ * Copyright 2015 Mikhail Bystryantsev
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -16,18 +17,231 @@
+  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+  */
+ 
++#include <windows.h>
++#include "resource.h"
+ #include "wine/debug.h"
++#include <wctype.h>
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(findstr);
+ 
++#define EXIT_SUCCESS 0
++#define EXIT_FAIL    1
++#define EXIT_ERROR   2
++#define BUF_SIZE 4096
++
++static const WCHAR c_paramOff[]    = {'O', 'F', 'F', 0};
++static const WCHAR c_paramOffline[] = {'O', 'F', 'F', 'L', 'I', 'N', 'E', 0};
++
++static void __cdecl printError(unsigned int id, ...)
++{
++	WCHAR format[1024];
++	WCHAR* str = NULL;
++	DWORD len = 0;
++	__ms_va_list va_args;
++
++	if (!LoadStringW(GetModuleHandleW(NULL), id, format, sizeof(format) / sizeof(format[0])))
++	{
++		WINE_FIXME("LoadString failed with %d\n", GetLastError());
++		return;
++	}
++
++	__ms_va_start(va_args, id);
++	len = FormatMessageW(FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ALLOCATE_BUFFER, format, 0, 0, (LPWSTR)&str, 0, &va_args);
++	__ms_va_end(va_args);
++
++	WriteConsoleW(GetStdHandle(STD_ERROR_HANDLE), str, len, NULL, NULL);
++	LocalFree(str);
++}
++
++int find(WCHAR* patternW, WCHAR* filename)
++{
++	HANDLE handle = NULL;
++	DWORD result = EXIT_FAIL;
++	int i, patternLen = 0, lineStart = 0, lastPos = 0, lastChunk = FALSE;
++	char* pattern = NULL, *line = NULL;
++	BOOL needMoreData = FALSE, isFile = FALSE;
++
++	/* FIXME: Support unlimited line length */
++	char buf[BUF_SIZE + 1];
++
++	if (patternW == NULL)
++	{
++		printError(STRING_BAD_COMMAND_LINE);
++		return EXIT_ERROR;
++	}
++
++	if (*patternW == '\0')
++	{
++		printError(STRING_NO_SEARCH_STRINGS);
++		return EXIT_ERROR;
++	}
++
++	if (filename != NULL)
++	{
++		handle = CreateFileW(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
++		if (handle == INVALID_HANDLE_VALUE)
++		{
++			printError(STRING_CANNOT_OPEN, filename);
++			return EXIT_ERROR;
++		}
++		isFile = TRUE;
++	}
++	else
++	{
++		handle = GetStdHandle(STD_INPUT_HANDLE);
++	}
++
++	patternLen = WideCharToMultiByte(CP_OEMCP, 0, patternW, -1, NULL, 0, NULL, NULL);
++	pattern = HeapAlloc(GetProcessHeap(), 0, patternLen);
++	WideCharToMultiByte(CP_OEMCP, 0, patternW, -1, pattern, patternLen, NULL, NULL);
++
++	while (!lastChunk)
++	{
++		const DWORD bytesToRead = needMoreData ? BUF_SIZE - lastPos : BUF_SIZE;
++		DWORD bufferSize = 0;
++
++		/* Continue from last position */
++		if (ReadFile(handle, &buf[lastPos], bytesToRead, &bufferSize, NULL) != TRUE)
++		{
++			result = EXIT_ERROR;
++			break;
++		}
++
++		lastChunk = bufferSize == 0;
++		bufferSize += lastPos;
++
++		for (i = min(lastPos, bufferSize - 1); i < bufferSize; i++)
++		{
++			const BOOL isWrap = (buf[i] == '\r' || buf[i] == '\n');
++			const BOOL isEOF = (lastChunk && i == bufferSize - 1);
++			if (isWrap || isEOF)
++			{
++				if (!needMoreData)
++				{
++					continue;
++				}
++
++				if (isEOF)
++				{
++					// Latest char, include them to line
++					i++;
++				}
++
++				buf[i] = 0;
++				line = &buf[lineStart];
++				if (strstr(line, pattern) != NULL)
++				{
++					WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), line, i - lineStart, NULL, NULL);
++					WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\r\n", 2, NULL, NULL);
++					result = EXIT_SUCCESS;
++				}
++
++				needMoreData = FALSE;
++			}
++			else if (!needMoreData)
++			{
++				needMoreData = TRUE;
++				lineStart = i;
++			}
++		}
++
++		if (!lastChunk && needMoreData && i == bufferSize && lineStart != 0)
++		{
++			/* Move data to buffer start to fill remainder from file */
++			for (i = 0; i < BUF_SIZE - lineStart; i++)
++			{
++				buf[i] = buf[lineStart + i];
++			}
++			lineStart = 0;
++		}
++
++		lastPos = needMoreData ? i : 0;
++
++		if (lastPos >= BUF_SIZE)
++		{
++			/* Due to limit reset state */
++			WINE_FIXME("Unable to process line longer than %u\n", BUF_SIZE);
++			lineStart = 0;
++			lastPos = 0;
++			needMoreData = FALSE;
++		}
++	}
++
++	HeapFree(GetProcessHeap(), 0, pattern);
++
++	if (isFile)
++	{
++		CloseHandle(handle);
++	}
++
++	return result;
++}
++
+ int wmain(int argc, WCHAR *argv[])
+ {
+-    int i;
++	int i, j;
++	WCHAR *s, c, cstr[3] = {'/', '\0', '\0'}, *pattern = NULL, *filename = NULL;
++
++	for (i = 1; i < argc; i++)
++	{
++		s = argv[i];
++		if (s[0] == '/' || s[0] == '-')
++		{
++			if (lstrcmpiW(s + 1, c_paramOff) == 0 || lstrcmpiW(s + 1, c_paramOffline) == 0)
++			{
++				WINE_FIXME("stub: %s\n", wine_dbgstr_w(s));
++				continue;
++			}
++
++			for (j = 1; s[j] != 0; j++)
++			{
++				c = s[j];
+ 
+-    WINE_FIXME("stub:");
+-    for (i = 0; i < argc; i++)
+-        WINE_FIXME(" %s", wine_dbgstr_w(argv[i]));
+-    WINE_FIXME("\n");
++				switch (towupper(c))
++				{
++				case 'B':
++				case 'E':
++				case 'L':
++				case 'R':
++				case 'S':
++				case 'I':
++				case 'X':
++				case 'V':
++				case 'N':
++				case 'M':
++				case 'P':
++				case 'F':
++				case 'C':
++				case 'G':
++				case 'D':
++				case 'A':
++				case 'O':
++				case '?':
++					cstr[1] = c;
++					WINE_FIXME("stub: %s\n", wine_dbgstr_w(cstr));
++					break;
++				default:
++					cstr[1] = c;
++					printError(STRING_ARG_IGNORED, cstr);
++				}
++			}
++		}
++		else
++		{
++			if (pattern == NULL)
++			{
++				pattern = s;
++			}
++			else if (filename == NULL)
++			{
++				filename = s;
++			}
++			else
++			{
++				WINE_FIXME("stub: additional input files\n");
++			}
++		}
++	}
+ 
+-    return 0;
++	return find(pattern, filename);
+ }
+diff --git a/programs/findstr/resource.h b/programs/findstr/resource.h
+new file mode 100644
+index 0000000..3097442
+--- /dev/null
++++ b/programs/findstr/resource.h
+@@ -0,0 +1,26 @@
++/*
++ * FINDSTR resource definitions
++ *
++ * Copyright 2015 Mikhail Bystryantsev
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#include <windef.h>
++
++#define STRING_BAD_COMMAND_LINE         2000
++#define STRING_ARG_IGNORED              2001
++#define STRING_CANNOT_OPEN              2002
++#define STRING_NO_SEARCH_STRINGS        2003
+-- 
+2.5.0.windows.1
+
