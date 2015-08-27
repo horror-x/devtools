@@ -7,7 +7,7 @@ wget -nv "http://downloads.activestate.com/ActivePerl/releases/5.22.0.2200/Activ
 wine msiexec /q /i Z:\\tmp\\perl.msi
 
 # Python 2.7
-wget -nv "https://www.python.org/ftp/python/2.7.8/python-2.7.10.msi" -O /tmp/python.msi
+wget -nv "https://www.python.org/ftp/python/2.7.10/python-2.7.10.msi" -O /tmp/python.msi
 wine msiexec /q /i Z:\\tmp\\python.msi
 
 # 7-Zip
