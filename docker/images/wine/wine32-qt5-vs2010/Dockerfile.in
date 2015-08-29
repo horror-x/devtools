@@ -1,0 +1,2 @@
+ADD install.sh /tmp/
+RUN /tmp/install.sh

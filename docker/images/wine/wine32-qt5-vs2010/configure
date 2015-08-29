@@ -1,0 +1,87 @@
+#!/bin/bash -e
+
+QT5_NO_OPENSSL=false
+QT5_FUNC_LEVEL_LINK=false
+QT5_WITH_HTTP=false
+QT5_CONFIGURE_ARGS=
+QT5_INIT_REPO_ARGS=
+QT5_BASEIMAGE_TAG="wine32-vs2010"
+QT5_MINOR_VERSION=5
+
+unknown_arg() {
+	echo "Unknown option: $1"
+	echo "Usage: ./configure [--no-openssl] [--configure-args=<args>] [--init-repository-args=<args>]"
+	exit 1
+}
+
+while [[ $# > 0 ]]; do
+	arg="$1"
+	case "$1" in
+		--no-openssl)
+			QT5_NO_OPENSSL=true
+			;;
+		--function-level-linking)
+			QT5_FUNC_LEVEL_LINK=true
+			;;
+		--with-http-module)
+			QT5_WITH_HTTP=true
+			;;
+		--*)
+			str="${1:2}"
+			items=(${str/=/ })
+			if [ "${#items[@]}" != "1" ]; then
+				key="${items[0]}"
+				value=${str:${#key}+1}
+			else
+				key="$str"
+				value="$2"
+				shift
+			fi
+			
+			# Escape backslashes
+			value="${value//\\/\\\\\\\\}"
+			# Escape quotes
+			value="${value//\"/\\\"}"
+			
+			case "$key" in
+				baseimage)
+					QT5_BASEIMAGE_TAG="$value"
+					;;
+				init-repository-args)
+					QT5_INIT_REPO_ARGS="$value"
+					;;
+				configure-args)
+					QT5_CONFIGURE_ARGS="$value"
+					;;	
+				minor-version)
+					QT5_MINOR_VERSION="$value"
+					;;
+				*)
+					unknown_arg "$arg"
+			esac
+			;;
+		*)		
+			unknown_arg "$arg"
+			;;
+	esac
+	shift
+done
+
+VARS="QT5_CONFIGURE_ARGS QT5_INIT_REPO_ARGS QT5_NO_OPENSSL QT5_FUNC_LEVEL_LINK QT5_MINOR_VERSION QT5_WITH_HTTP"
+
+echo "FROM $QT5_BASEIMAGE_TAG" > Dockerfile
+echo ""                       >> Dockerfile
+
+for var in $VARS; do
+	if [ -n "${!var}" ]; then
+		echo "ENV $var ${!var}" >> Dockerfile
+	fi
+done
+
+echo ""           >> Dockerfile
+cat Dockerfile.in >> Dockerfile
+
+echo "Configured:"
+for var in $VARS; do
+	printf "%-24s \"%s\"\n" "$var" "${!var}"
+done

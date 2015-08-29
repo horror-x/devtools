@@ -1,4 +1,4 @@
-From cae66856dc83573a429f1725b2dc676d9044fec2 Mon Sep 17 00:00:00 2001
+From 4a677030f684e12d6ad4835417b6c0d6fd97a186 Mon Sep 17 00:00:00 2001
 From: Mikhail Bystryantsev <ho-rr-or@mail.ru>
 Date: Sat, 29 Aug 2015 16:17:59 +0300
 Subject: findstr: minimal implementation
@@ -6,9 +6,9 @@ Subject: findstr: minimal implementation
 ---
  programs/findstr/Makefile.in |   3 +
  programs/findstr/findstr.rc  |  31 ++++++
- programs/findstr/main.c      | 226 +++++++++++++++++++++++++++++++++++++++++--
+ programs/findstr/main.c      | 232 +++++++++++++++++++++++++++++++++++++++++--
  programs/findstr/resource.h  |  26 +++++
- 4 files changed, 280 insertions(+), 6 deletions(-)
+ 4 files changed, 286 insertions(+), 6 deletions(-)
  create mode 100644 programs/findstr/findstr.rc
  create mode 100644 programs/findstr/resource.h
 
@@ -63,7 +63,7 @@ index 0000000..97bcd8f
 +}
 +
 diff --git a/programs/findstr/main.c b/programs/findstr/main.c
-index de5de33..669ac99 100644
+index de5de33..5bef734 100644
 --- a/programs/findstr/main.c
 +++ b/programs/findstr/main.c
 @@ -1,5 +1,6 @@
@@ -73,7 +73,7 @@ index de5de33..669ac99 100644
   *
   * This library is free software; you can redistribute it and/or
   * modify it under the terms of the GNU Lesser General Public
-@@ -16,18 +17,231 @@
+@@ -16,18 +17,237 @@
   * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
   */
  
@@ -172,7 +172,7 @@ index de5de33..669ac99 100644
 +
 +		for (i = min(lastPos, bufferSize - 1); i < bufferSize; i++)
 +		{
-+			const BOOL isWrap = (buf[i] == '\r' || buf[i] == '\n');
++			const BOOL isWrap = buf[i] == '\n';
 +			const BOOL isEOF = (lastChunk && i == bufferSize - 1);
 +			if (isWrap || isEOF)
 +			{
@@ -191,8 +191,14 @@ index de5de33..669ac99 100644
 +				line = &buf[lineStart];
 +				if (strstr(line, pattern) != NULL)
 +				{
-+					WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), line, i - lineStart, NULL, NULL);
-+					WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\r\n", 2, NULL, NULL);
++					const DWORD len = i - lineStart;
++					DWORD ret = WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), line, len, NULL, NULL)
++						&& WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, NULL, NULL);
++					if (!ret)
++					{
++						WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), line, len, NULL, FALSE);
++						WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, NULL, FALSE);
++					}
 +					result = EXIT_SUCCESS;
 +				}
 +
